@@ -1,12 +1,13 @@
-import 'package:chat/core/app_config.dart';
 import 'package:chat/logic/conversations_cubit/conversations_cubit.dart';
 import 'package:chat/presentation/conversations_page.dart';
+import 'package:chat/presentation/global_message_listener.dart';
+import 'package:chat/presentation/profile_page.dart';
 import 'package:chat/services/conversation_service.dart';
+import 'package:chat/services/signalr_service.dart';
 import 'package:chat/services/user_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:google_nav_bar/google_nav_bar.dart';
 import '../core/app_routes.dart';
 import '../logic/friends_cubit/friends_cubit.dart';
 import '../logic/suggestions_cubit/suggestions_cubit.dart';
@@ -15,39 +16,44 @@ import 'suggestions_page.dart';
 
 class MainHomeScreen extends StatelessWidget {
   const MainHomeScreen({super.key});
-
+  
   @override
   Widget build(BuildContext context) {
-    // SAFETY CHECK: Handle null arguments during Hot Restart or dev testing
+    // SAFETY CHECK
     final args = ModalRoute.of(context)?.settings.arguments;
     final userId = args is String ? args : "";
 
     if (userId.isEmpty) {
-      // If we lost the ID, force user back to Login to prevent crashes
       Future.microtask(
-          () => Navigator.pushReplacementNamed(context, AppRoutes.login));
+          // ignore: use_build_context_synchronously
+          () => AppRoutes.nextRemoveUntil(context,AppRoutes.login)
+          );
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
+    // ✅ 3. CRITICAL FIX: CONNECT TO SIGNALR
+    // We check if the service is already initialized inside initSignalR, 
+    // so it is safe to call this in the build method.
+    Future.microtask(() {
+       context.read<SignalRService>().initSignalR(userId);
+    });
     return MultiBlocProvider(
       providers: [
-        // 1. Suggestions
         BlocProvider(
           create: (context) =>
               SuggestionsCubit(UserService(), userId)..loadSuggestions(),
         ),
-        // 2. Friends
         BlocProvider(
           create: (context) =>
               FriendsCubit(UserService(), userId)..loadFriends(),
         ),
-        // 3. Conversations
         BlocProvider(
           create: (context) => ConversationsCubit(ConversationService(), userId)
             ..loadConversations(),
         ),
       ],
-      child: const _MainScreenContent(),
+     child: const GlobalMessageListener(
+        child: _MainScreenContent(), 
+      ),
     );
   }
 }
@@ -61,125 +67,135 @@ class _MainScreenContent extends StatefulWidget {
 
 class _MainScreenContentState extends State<_MainScreenContent> {
   int _selectedIndex = 0;
-
-  // REORDERED LIST: Conversations is First (Standard for Chat Apps)
+  
   final List<Widget> _pages = const [
-    ConversationsPage(), // Index 0
-    FriendsPage(), // Index 1
-    SuggestionsPage(), // Index 2
-    ProfilePage(), // Index 3
+    ConversationsPage(),
+    FriendsPage(),
+    SuggestionsPage(),
+    ProfilePage(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // IndexedStack keeps the state of pages alive (Scroll position, text inputs)
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: [
-          // 1. MESSAGES TAB (With Badge)
-          NavigationDestination(
-            // We use BlocBuilder to dynamically show the unread count/badge
-            icon: BlocBuilder<ConversationsCubit, ConversationsState>(
-              builder: (context, state) {
-                // Logic: If we have conversations, show a dot or number
-                // Real implementation: check 'unreadCount' in your model
-                bool hasUnread = false;
-                if (state is ConversationsLoaded &&
-                    state.conversations.isNotEmpty) {
-                  // Example logic: hasUnread = state.conversations.any((c) => c.hasUnread);
-                  hasUnread = true; // Placeholder
-                }
+    final theme = Theme.of(context);
 
-                return Badge(
-                  isLabelVisible: hasUnread,
-                  label: const Text('!'), // Or number
-                  child: const Icon(Icons.chat_bubble_outline),
-                );
-              },
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+
+      // ✅ 1. SMOOTH PAGE TRANSITION
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 500), // Duration of transition
+        switchInCurve: Curves.easeOutExpo, // Smooth entry curve
+        switchOutCurve: Curves.easeInExpo, // Smooth exit curve
+        
+        // This builder creates the animation (Fade + Slide Up)
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          final slideAnimation = Tween<Offset>(
+            begin: const Offset(0.0, 0.05), // Start 5% down (Slide Up effect)
+            end: Offset.zero,
+          ).animate(animation);
+
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: slideAnimation,
+              child: child,
             ),
-            selectedIcon: const Icon(Icons.chat_bubble),
-            label: 'Chats',
-          ),
-
-          // 2. FRIENDS TAB
-          const NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Friends',
-          ),
-
-          // 3. SUGGESTIONS TAB
-          const NavigationDestination(
-            icon: Icon(Icons.person_add_outlined),
-            selectedIcon: Icon(Icons.person_add),
-            label: 'Find',
-          ),
-
-          // 4. PROFILE TAB
-          const NavigationDestination(
-            icon: Icon(Icons.account_circle_outlined),
-            selectedIcon: Icon(Icons.account_circle),
-            label: 'Profile',
-          ),
-        ],
+          );
+        },
+        
+        // ✅ CRITICAL: The Key ensures Flutter knows the widget changed
+        child: KeyedSubtree(
+          key: ValueKey<int>(_selectedIndex),
+          child: _pages[_selectedIndex],
+        ),
       ),
-    );
-  }
-}
 
-// ---------------------------------------------------------------------------
-// PROFILE PAGE (Added basic Logout Logic)
-// ---------------------------------------------------------------------------
-
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("My Profile")),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
-            const SizedBox(height: 20),
-            const Text("User Name",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
-
-            // Logout Button
-            ElevatedButton.icon(
-              onPressed: () async {
-                // Clear preferences, tokens, etc.
-                // Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
-
-                // 1. افتح SharedPreferences
-                final prefs = await SharedPreferences.getInstance();
-
-                // 2. امسح كل البيانات
-                await prefs.clear();
-
-                // 3. امسح الـ AppConfig لو بتخزّن فيه userId
-                AppConfig.userId = null;
-                Navigator.pushReplacementNamed(context, AppRoutes.login);
-              },
-              icon: const Icon(Icons.logout),
-              label: const Text("Logout"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade100,
-                foregroundColor: Colors.red,
+      // ✅ 2. FLOATING NAVBAR
+      bottomNavigationBar: Container(
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 15.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 5.0),
+              child: GNav(
+                rippleColor: theme.primaryColor.withOpacity(0.1),
+                hoverColor: theme.primaryColor.withOpacity(0.1),
+                haptic: true,
+                tabBorderRadius: 25,
+                
+                // Navbar Animation Settings
+                curve: Curves.easeInOutCubic,
+                duration: const Duration(milliseconds: 500),
+                gap: 8,
+                
+                color: Colors.grey[500],
+                activeColor: theme.primaryColor,
+                iconSize: 24,
+                tabBackgroundColor: theme.primaryColor.withOpacity(0.1),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                
+                selectedIndex: _selectedIndex,
+                onTabChange: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
+                tabs: [
+                  GButton(
+                    icon: Icons.chat_bubble_outline,
+                    text: 'Chats',
+                    leading: _selectedIndex == 0
+                        ? null
+                        : BlocBuilder<ConversationsCubit, ConversationsState>(
+                            builder: (context, state) {
+                              bool hasUnread = false;
+                              if (state is ConversationsLoaded) {
+                                hasUnread = state.conversations.isNotEmpty;
+                              }
+                              return Stack(
+                                children: [
+                                  const Icon(Icons.chat_bubble_outline, color: Colors.grey),
+                                  if (hasUnread)
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: Container(
+                                        height: 8,
+                                        width: 8,
+                                        decoration: const BoxDecoration(
+                                          color: Colors.red,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                  ),
+                  const GButton(icon: Icons.people_outline, text: 'Friends'),
+                  const GButton(icon: Icons.explore_outlined, text: 'Discover'),
+                  const GButton(icon: Icons.person_outline, text: 'Profile'),
+                ],
               ),
-            )
-          ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
+

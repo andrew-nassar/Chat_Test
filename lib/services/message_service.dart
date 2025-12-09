@@ -26,7 +26,9 @@ class MessageService {
     final body = {
       "senderId": senderId,
       "conversationId": conversationId,
-      "content": content
+      "content": content,
+      "type": "string",
+      "mediaUrl": "string"
     };
 
     final response = await http.post(

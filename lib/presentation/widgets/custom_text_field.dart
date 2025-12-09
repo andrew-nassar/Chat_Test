@@ -8,7 +8,9 @@ class CustomTextField extends StatefulWidget {
   final TextInputType type;
   final String? Function(String?)? validator; // Custom validation logic
   final TextInputAction? action; // Controls the "Enter" key (Next/Done)
-
+  // ✅ 1. Add this field
+  final Iterable<String>? autofillHints;
+  
   const CustomTextField({
     super.key,
     required this.controller,
@@ -17,7 +19,8 @@ class CustomTextField extends StatefulWidget {
     this.isPassword = false,
     this.type = TextInputType.text,
     this.validator, 
-    this.action = TextInputAction.next,
+    this.action = TextInputAction.next, this.autofillHints,
+    
   });
 
   @override
@@ -46,7 +49,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
               }
               return null;
             },
-            
+        autofillHints: widget.autofillHints,    
         style: const TextStyle(fontSize: 16, color: Colors.black87),
         decoration: InputDecoration(
           labelText: widget.label,

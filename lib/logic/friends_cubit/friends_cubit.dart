@@ -77,4 +77,5 @@ class FriendsCubit extends Cubit<FriendsState> {
       await initScreen();
     }
   }
+  
 }

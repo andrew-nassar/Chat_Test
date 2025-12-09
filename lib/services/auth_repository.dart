@@ -19,6 +19,8 @@ class AuthRepository {
       // Save Token/ID locally
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userId', data['id']); // Adjust 'id' based on your C# response
+      AppConfig.userId = data['id'];
+      print("============================== "+data['id']);
       return data['id'];
     } else {
       throw Exception("Login Failed: ${response.body}");

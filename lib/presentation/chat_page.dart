@@ -1,4 +1,5 @@
 import 'package:chat/Models/message_model.dart';
+import 'package:chat/services/signalr_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../logic/chat_cubit/chat_cubit.dart';
@@ -52,7 +53,8 @@ class _ChatPageState extends State<ChatPage> {
       create: (context) => ChatCubit(
         service: MessageService(),
         conversationId: widget.args.conversationId,
-        currentUserId: widget.args.currentUserId,
+        currentUserId: widget.args.currentUserId, 
+        signalRService: context.read<SignalRService>(),
       )..loadMessages(),
       child: GestureDetector(
         // Dismiss keyboard when tapping the message list

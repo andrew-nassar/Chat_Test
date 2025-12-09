@@ -32,7 +32,7 @@ class SuggestionsCubit extends Cubit<SuggestionsState> {
     }
   }
   // 2. Send Request (and remove user from list optimistically)
-  void sendRequest(String receiverId) async {
+  void sendFriendRequest(String receiverId) async {
     if (state is SuggestionsLoaded) {
       final currentList = (state as SuggestionsLoaded).users;
       
