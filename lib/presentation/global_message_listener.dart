@@ -19,27 +19,26 @@ class _GlobalMessageListenerState extends State<GlobalMessageListener> {
     super.initState();
     final signalR = context.read<SignalRService>();
     
+    // ✅ FIX: Call _handleNewMessage inside the listener
     signalR.messageStream.listen((message) {
-        print("Global Listener: Received ${message.content}"); 
-        
-        // ✅ FIX: Call the function that handles BOTH List Update AND Notification
         _handleNewMessage(message); 
     }); 
   }
 
   void _handleNewMessage(MessageDto message) {
-    print("🔔 Processing Message: ${message.content}");
+    print("🔔 Global Listener: Received ${message.content}");
 
-    // 1. Update the Conversation List
+    // 1. Update List
     context.read<ConversationsCubit>().updateConversationOnMessage(message);
 
     // 2. Show Notification
-    // (Optional: Check if message.senderId != currentUserId to avoid notifying yourself)
     NotificationService().showNotification(
       title: "New Message",
-      body: message.content,
+      body: message.content, 
+      conversationId: message.conversationId,
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return widget.child;

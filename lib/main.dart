@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:chat/core/app_config.dart';
 import 'package:chat/logic/conversations_cubit/conversations_cubit.dart';
 import 'package:chat/presentation/conversations_page.dart';
+import 'package:chat/presentation/global_message_listener.dart';
 import 'package:chat/services/auth_repository.dart';
 import 'package:chat/logic/auth_cubit/auth_cubit.dart';
 import 'package:chat/services/conversation_service.dart';
@@ -79,60 +80,5 @@ class MyApp extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class GlobalMessageListener extends StatefulWidget {
-  final Widget child;
-  const GlobalMessageListener({super.key, required this.child});
-
-  @override
-  State<GlobalMessageListener> createState() => _GlobalMessageListenerState();
-}
-
-class _GlobalMessageListenerState extends State<GlobalMessageListener> {
-  StreamSubscription? _signalRSub;
-
-  @override
-  void initState() {
-    super.initState();
-    _initListener();
-  }
-
-  void _initListener() {
-    final signalR = context.read<SignalRService>();
-    final notificationService = context.read<NotificationService>();
-    final conversationsCubit = context.read<ConversationsCubit>();
-
-    // ✅ Listen to the stream GLOBALLY
-    _signalRSub = signalR.messageStream.listen((message) {
-      final currentUserId = AppConfig.userId;
-
-      print("🔔 Global Listener Received: ${message.content}");
-
-      // 1. Update the Conversation List (Change Last Message)
-      // This works even if you are on the home screen
-      conversationsCubit.updateConversationOnMessage(message);
-
-      // 2. Show Notification
-      // Only show if the message is NOT from me
-      if (message.senderId != currentUserId) {
-        notificationService.showNotification(
-          title: "New Message", 
-          body: message.content,
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _signalRSub?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
   }
 }

@@ -33,7 +33,7 @@ class NotificationService {
     }
   }
 
-  Future<void> showNotification({required String title, required String body}) async {
+  Future<void> showNotification({required String title, required String body , required String conversationId}) async {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'chat_channel_id', // Must be unique
       'Chat Messages',
@@ -46,7 +46,7 @@ class NotificationService {
     const NotificationDetails details = NotificationDetails(android: androidDetails);
 
     await _notificationsPlugin.show(
-      DateTime.now().millisecond, // Unique ID per notification
+      conversationId.hashCode, // ثابت لكل مستخدم
       title, 
       body, 
       details,
