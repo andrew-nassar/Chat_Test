@@ -53,23 +53,26 @@ class ChatCubit extends Cubit<ChatState> {
   // 1. Load History
   Future<void> loadMessages() async {
     try {
-      emit(ChatLoading());
-      _messages = await _service.getMessages(conversationId, 1);
-      print("================================= "+conversationId);
+      if (_messages.isEmpty) emit(ChatLoading()); // Only show loader if empty
+      
+      final history = await _service.getMessages(conversationId, 1);
+      
+      // ✅ Update Source of Truth
+      _messages = history; 
       emit(ChatLoaded(List.from(_messages)));
     } catch (e) {
       emit(ChatError("Failed to load chat history"));
     }
   }
   
-// 2. SEND MESSAGE (Optimistic Update)
+  // 2. SEND MESSAGE (Optimistic Update)
   Future<void> sendMessage(String content) async {
     if (content.trim().isEmpty) return;
 
-    // A. Create a Temporary Message (Optimistic)
-    // We use DateTime as a temporary ID until the server confirms
+    // A. Create Temp Message
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
     final tempMessage = MessageDto(
-      id: DateTime.now().millisecondsSinceEpoch.toString(), 
+      id: tempId,
       conversationId: conversationId,
       senderId: currentUserId,
       content: content,
@@ -77,46 +80,50 @@ class ChatCubit extends Cubit<ChatState> {
       isRead: false,
     );
 
-    // B. UPDATE UI INSTANTLY
-    if (state is ChatLoaded) {
-      final currentState = state as ChatLoaded;
-      
-      // 1. Make a copy of the current list (Essential for Bloc to detect change)
-      final List<MessageDto> updatedList = List.from(currentState.messages);
-      
-      // 2. Add temp message to the START (Index 0) because list is reversed
-      updatedList.insert(0, tempMessage);
-      
-      // 3. Emit new state -> Screen updates immediately
-      emit(currentState.copyWith(messages: updatedList));
-    }
+    // B. UPDATE UI INSTANTLY (Optimistic)
+    // ✅ FIX: Update the class-level _messages list first!
+    _messages.insert(0, tempMessage);
+    emit(ChatLoaded(List.from(_messages)));
 
-    // C. SEND TO SERVER (Background)
+    // C. SEND TO SERVER
     try {
-      await _service.sendMessage(currentUserId, conversationId, content);
-      
-      // The SignalR listener will eventually receive the "Real" message.
-      // You might get a duplicate (one temp, one real). 
-      // Ideally, your list rendering handles duplicates by ID, 
-      // or you simply ignore the incoming message if it matches the content/timestamp.
-      
+      // ✅ NOTE: Ensure your service returns the created MessageDto!
+      final realMessage = await _service.sendMessage(
+          currentUserId, conversationId, content
+      );
+
+      // D. SWAP TEMP ID FOR REAL ID
+      final index = _messages.indexWhere((m) => m.id == tempId);
+      if (index != -1) {
+        _messages[index] = realMessage; // Replace temp with real
+        emit(ChatLoaded(List.from(_messages))); // Update UI with real ID
+      }
+
     } catch (e) {
-      // If sending fails, show error
-      emit(ChatError("Failed to send message"));
-      // Optional: Remove the temp message from the list here if it failed
-      loadMessages(); 
+      print("❌ Send Failed: $e");
+      // Optional: Mark message as failed or remove it
+      _messages.removeWhere((m) => m.id == tempId);
+      emit(ChatLoaded(List.from(_messages))); // Revert UI
+      // emit(ChatError("Failed to send")); // Don't wipe the screen with Error state
     }
   }
 
   // 3. Receive Real-time Message (Call this from your SignalR Listener)
+  // Inside ChatCubit
+
   void onMessageReceived(MessageDto message) {
-    // Prevent duplicate if the API loaded it and SignalR sent it at the same time
+    // 1. Check if I am the sender
+    if (message.senderId == currentUserId) {
+        // If I sent this, I already added it optimistically.
+        // IGNORE IT to prevent duplicates.
+        return; 
+    }
+
+    // 2. Existing duplicate check (for other scenarios)
     final isDuplicate = _messages.any((m) => m.id == message.id);
-    
     if (!isDuplicate) {
-      // Insert at index 0 because ListView is reverse: true
       _messages.insert(0, message);
-      emit(ChatLoaded(List.from(_messages))); // Emit NEW list copy
+      emit(ChatLoaded(List.from(_messages))); 
     }
   }
   

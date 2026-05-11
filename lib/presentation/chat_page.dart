@@ -1,4 +1,5 @@
 import 'package:chat/Models/message_model.dart';
+import 'package:chat/services/notification_service.dart';
 import 'package:chat/services/signalr_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -38,12 +39,14 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _textController = TextEditingController();
+    NotificationService().setActiveConversationId(widget.args.conversationId);
   }
 
   @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
+    NotificationService().setActiveConversationId(null);
     super.dispose();
   }
 

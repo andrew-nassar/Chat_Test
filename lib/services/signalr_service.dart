@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'package:signalr_netcore/signalr_client.dart';
 import 'package:chat/core/app_config.dart';
+import 'package:http/http.dart';
+import 'package:signalr_netcore/signalr_client.dart';
 import '../Models/message_model.dart';
 
 class SignalRService {
@@ -9,7 +10,6 @@ class SignalRService {
   // Broadcast stream so multiple widgets can listen (Chat Screen + Global Listener)
   final _messageController = StreamController<MessageDto>.broadcast();
   Stream<MessageDto> get messageStream => _messageController.stream;
-
   // ✅ FIX: Require userId to connect
   Future<void> initSignalR(String userId) async {
     if (_hubConnection?.state == HubConnectionState.Connected) return;
@@ -26,6 +26,8 @@ class SignalRService {
 
     try {
       await _hubConnection?.start();
+      AppConfig.connectionId = _hubConnection?.connectionId;      
+      print("✅ SignalR Connected ID for User: ${AppConfig.connectionId}");
       print("✅ SignalR Connected for User: $userId");
     } catch (e) {
       print("❌ SignalR Connection Error: $e");

@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:chat/core/app_config.dart';
+import 'package:chat/services/signalr_service.dart';
 import 'package:http/http.dart' as http;
 import '../Models/message_model.dart';
 
 class MessageService {
   final String baseUrl = AppConfig.baseUrl;
 
-  // GET History
   Future<List<MessageDto>> getMessages(String conversationId, int page) async {
     final response = await http.get(
       Uri.parse('$baseUrl/Message/$conversationId/messages?pageNumber=$page&pageSize=20'),
@@ -20,15 +20,18 @@ class MessageService {
       throw Exception("Failed to load messages");
     }
   }
-
   // SEND Message
-  Future<MessageDto> sendMessage(String senderId, String conversationId, String content) async {
+  Future<MessageDto> sendMessage(String senderId, String conversationId, String content ) async {
+  String? currentConnectionId = AppConfig.connectionId;
+  print("==================================$currentConnectionId");
     final body = {
       "senderId": senderId,
       "conversationId": conversationId,
       "content": content,
       "type": "string",
-      "mediaUrl": "string"
+      "mediaUrl": "string",
+      // ✅ 2. بنبعته للباك إند
+      "connectionId": currentConnectionId 
     };
 
     final response = await http.post(

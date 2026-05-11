@@ -1,3 +1,4 @@
+// notification_service.dart
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -8,48 +9,69 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  Future<void> init() async {
-    // Android Settings
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+  // ✅ 1. TRACK ACTIVE CHAT
+  String? _currentOpenConversationId;
 
-    // iOS Settings
-    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
-    const InitializationSettings initSettings =
-        InitializationSettings(android: androidSettings, iOS: iosSettings);
-
-    await _notificationsPlugin.initialize(initSettings);
-    
-    // ✅ FIX: Request Permissions for Android 13+
-    if (Platform.isAndroid) {
-      await _notificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
+  void setActiveConversationId(String? id) {
+    _currentOpenConversationId = id;
+    if (id != null) {
+      clearConversation(id); // Clear notifications if we enter the chat
     }
   }
 
-  Future<void> showNotification({required String title, required String body , required String conversationId}) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'chat_channel_id', // Must be unique
+  Future<void> init() async {
+    // ... (Keep your existing init code here) ...
+  }
+
+  final Map<String, List<String>> _pendingMessages = {}; 
+
+  Future<void> showNotification({
+  required String title,
+  required String body,
+  required String conversationId,
+  }) async {
+    // Block if chat open
+    if (_currentOpenConversationId == conversationId) {
+      print("🔕 Notification blocked: User is viewing this chat.");
+      return;
+    }
+
+    _pendingMessages.putIfAbsent(conversationId, () => []);
+
+    // Prevent consecutive duplicates
+    final pending = _pendingMessages[conversationId]!;
+    if (pending.isEmpty || pending.last != body) {
+      pending.add(body);
+    }
+
+    final inboxStyle = InboxStyleInformation(
+      pending,
+      contentTitle: title,
+      summaryText: '${pending.length} new messages',
+    );
+
+    final androidDetails = AndroidNotificationDetails(
+      'chat_channel_id',
       'Chat Messages',
-      channelDescription: 'Notifications for new messages',
       importance: Importance.max,
       priority: Priority.high,
-      ticker: 'ticker',
+      styleInformation: inboxStyle,
+      groupKey: "chat_$conversationId",
     );
 
-    const NotificationDetails details = NotificationDetails(android: androidDetails);
-
+    // IMPORTANT: pass an empty body (or a short summary) so the collapsed view
+    // doesn't duplicate the first inbox line.
     await _notificationsPlugin.show(
-      conversationId.hashCode, // ثابت لكل مستخدم
-      title, 
-      body, 
-      details,
+      conversationId.hashCode,
+      title,
+      '', // <-- empty to avoid duplication
+      NotificationDetails(android: androidDetails),
     );
+  }
+
+
+  void clearConversation(String conversationId) {
+    _pendingMessages.remove(conversationId);
+    _notificationsPlugin.cancel(conversationId.hashCode);
   }
 }

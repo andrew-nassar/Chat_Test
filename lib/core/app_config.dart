@@ -4,7 +4,7 @@ class AppConfig {
   
   static const String loginEndpoint = "$baseUrl/Account/login";
   static const String registerEndpoint = "$baseUrl/Account/register";
-  
+  static String? connectionId ;
   static String? userId ;
   // You can add colors or other static data here too
   static const String appName = "Chat App";
